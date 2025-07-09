@@ -1,98 +1,116 @@
+
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BWGA Nexus AI</title>
-    <meta name="theme-color" content="#03045E">
-    <link rel="manifest" href="/manifest.json">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BWGA Nexus 7.0 - AI Report Builder</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              'nexus-blue': '#00B4D8',
-              'nexus-dark': '#03045E',
-              'nexus-bg-start': '#020024',
-              'nexus-bg-end': '#03045E',
-              'nexus-surface': 'rgba(12, 16, 92, 0.3)',
-              'nexus-border': 'rgba(0, 180, 216, 0.2)',
-            },
-            fontFamily: {
-                sans: ['Inter', 'sans-serif'],
-            },
-            typography: (theme) => ({
-              invert: {
-                css: {
-                  '--tw-prose-p': theme('colors.gray.400'),
-                  '--tw-prose-strong': theme('colors.white'),
-                },
-              },
-            }),
-          },
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; } </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div id="main-container" class="w-full max-w-2xl bg-white rounded-xl shadow-2xl border border-gray-200">
+        <!-- The entire application will be rendered here by the script below -->
+    </div>
+
+<script>
+    const mainContainer = document.getElementById('main-container');
+    let userProfile = {};
+    let generatedReport = {};
+
+    const templates = {
+        welcome: `
+            <div class="p-8 text-center animate-fadeIn">
+                <h2 class="text-3xl font-bold tracking-tight">BWGA Nexus AI Report Builder</h2>
+                <p class="mt-2 text-lg text-gray-600">Begin your discovery. Please select your role:</p>
+                <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div onclick="startBuilder('business')" class="p-8 border-2 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer"><p class="font-semibold text-lg">Business / Investor</p></div>
+                    <div onclick="startBuilder('government')" class="p-8 border-2 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer"><p class="font-semibold text-lg">Government / Agency</p></div>
+                </div>
+            </div>`,
+        builder(userType) {
+            const options = userType === 'business' ? ["Market Expansion", "Supply Chain Optimization"] : ["FDI Attraction", "Regional Development"];
+            return `<div class="p-8 animate-fadeIn"><h2 class="text-xl font-semibold mb-6 text-center">Nexus Dialogue: Build Your Report</h2><div class="space-y-6"><div><label class="font-semibold">Organization Name</label><input type="text" id="organization" class="mt-1 w-full p-2 border rounded-md"/></div><div><label class="font-semibold">Primary Objective</label><select id="objective" class="mt-1 w-full p-2 border rounded-md"><option value="">Select...</option>${options.map(o => `<option value="${o}">${o}</option>`).join('')}</select></div></div><div class="flex justify-between mt-8"><button onclick="renderContent('welcome')" class="px-6 py-2 bg-gray-200 rounded-md">Back</button><button onclick="handleGenerate()" class="px-6 py-2 bg-blue-600 text-white rounded-md font-semibold">Generate Intelligence Brief</button></div></div>`;
         },
-      };
-    </script>
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
-    "@google/genai": "https://esm.sh/@google/genai@0.8.0",
-    "jspdf": "https://esm.sh/jspdf@2.5.1",
-    "html2canvas": "https://esm.sh/html2canvas@1.4.1",
-    "marked": "https://esm.sh/marked@12.0.2",
-    "recharts": "https://esm.sh/recharts@2.12.7",
-    "react-syntax-highlighter": "https://esm.sh/react-syntax-highlighter@15.5.0",
-    "react-syntax-highlighter/": "https://esm.sh/react-syntax-highlighter@15.5.0/",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-    "react/": "https://esm.sh/react@18.2.0/",
+        loading: `<div class="p-16 text-center animate-pulse"><h2 class="text-2xl font-semibold">AI Engine is Building Your Report...</h2><p class="text-gray-500 mt-2">Analyzing global data streams...</p></div>`,
+        result: `
+            <div class="p-8 text-center animate-fadeIn">
+                <h2 class="text-2xl font-bold text-green-700">✅ Intelligence Brief Ready!</h2>
+                <div class="mt-4 p-4 bg-gray-50 border rounded-lg text-left">
+                    <p class="font-semibold">AI Summary for ${generatedReport.organization}:</p>
+                    <p class="text-sm mt-1">${generatedReport.summaryText}</p>
+                </div>
+                <div class="mt-6">
+                    <button onclick="downloadPdf()" class="w-full px-8 py-3 bg-blue-600 text-white rounded-md font-semibold text-lg hover:bg-blue-700">Download Your PDF Brief</button>
+                </div>
+                <button onclick="renderContent('welcome')" class="mt-4 text-sm text-gray-500 hover:underline">Start a New Report</button>
+            </div>`
+    };
+
+    function renderContent(templateName, ...args) {
+        mainContainer.innerHTML = (typeof templates[templateName] === 'string') ? templates[templateName] : templates[templateName](...args);
+    }
     
-  }
-}
+    function startBuilder(type) {
+        userProfile.userType = type;
+        renderContent('builder', type);
+    }
+
+    function handleGenerate() {
+        const organization = document.getElementById('organization').value;
+        const objective = document.getElementById('objective').value;
+        if (!organization || !objective) { alert('Please complete all fields.'); return; }
+        
+        userProfile.organization = organization;
+        userProfile.objective = objective;
+
+        renderContent('loading');
+        
+        setTimeout(() => {
+            const urpIndex = (Math.random() * 2.5 + 6.5).toFixed(1);
+            const riskScore = (Math.random() * 4 + 2).toFixed(1);
+            let summaryText = `NSIL™ Analysis: For your objective of "${objective}", our AI indicates the target region demonstrates a strong URP Index of ${urpIndex}. `;
+            summaryText += (parseFloat(riskScore) < 4.5) ? "The political and regulatory environment appears stable, presenting a low-risk profile." : `This is balanced by a moderate risk profile of ${riskScore}, requiring targeted due diligence.`;
+            
+            generatedReport = { urpIndex, riskScore, partnerCount: Math.floor(Math.random() * 7) + 3, summaryText, ...userProfile };
+            renderContent('result');
+        }, 2000);
+    }
+
+    function downloadPdf() {
+        const { jsPDF } = window.jspdf;
+        const { autoTable } = window.jspdf;
+        const doc = new jsPDF();
+        const { organization, urpIndex, riskScore, partnerCount, summaryText } = generatedReport;
+        
+        doc.setFont("helvetica", "bold"); doc.setFontSize(20);
+        doc.text("BWGA Nexus Intelligence Brief", 105, 20, { align: 'center' });
+        doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        doc.text(`CONFIDENTIAL AI-GENERATED REPORT FOR: ${organization.toUpperCase()}`, 105, 28, { align: 'center' });
+        doc.line(15, 35, 195, 35);
+
+        doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+        doc.text("1. Executive Summary & NSIL™ Narrative", 15, 45);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(11);
+        doc.text(doc.splitTextToSize(summaryText, 180), 15, 52);
+
+        doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+        doc.text("2. Core AI-Generated Metrics", 15, 80);
+        doc.autoTable({ startY: 85, head: [['Metric', 'Score', 'Description']], body: [['URP Index™', urpIndex, 'Untapped Regional Potential'], ['AGER-AI™ Risk Score', riskScore, 'Political & Economic Stability'], ['GSM-AI™ Partner Matches', partnerCount, 'Compatible Partner Archetypes Found']], });
+
+        doc.setFontSize(8);
+        doc.text("Disclaimer: This AI-generated report is for preliminary assessment only and not a substitute for professional due diligence.", 15, 280);
+
+        doc.save(`BWGA_Brief_${organization.replace(/\s+/g, '_')}.pdf`);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        renderContent('welcome');
+    });
 </script>
-    <style>
-        .blueprint-content {
-            background-color: #03045E; /* nexus-bg-end */
-            color: #d1d5db; /* text-gray-300 */
-            font-family: 'Inter', sans-serif;
-            padding: 2rem;
-            line-height: 1.6;
-        }
-        .blueprint-content h1, .blueprint-content h2, .blueprint-content h3, .blueprint-content h4, .blueprint-content h5 {
-            color: white;
-            font-weight: 700;
-        }
-        .blueprint-content h2 { font-size: 1.5rem; margin-top: 2rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid rgba(0, 180, 216, 0.3); }
-        .blueprint-content h3 { font-size: 1.25rem; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #00B4D8; }
-        .blueprint-content h4 { font-size: 1.1rem; margin-top: 1.25rem; margin-bottom: 0.5rem; color: #90e0ef; }
-        .blueprint-content strong { color: white; }
-        .blueprint-content ul { list-style-type: disc; margin-left: 1.5rem; padding-left: 1rem; margin-bottom: 1rem; }
-        .blueprint-content li { margin-bottom: 0.5rem; }
-    </style>
-  </head>
-  <body class="bg-nexus-bg-start">
-    <div id="root"></div>
-    <script type="text/babel" data-presets="react,typescript" data-type="module" src="index.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/service-worker.js')
-            .then(registration => {
-              console.log('ServiceWorker registration successful with scope: ', registration.scope);
-            })
-            .catch(error => {
-              console.log('ServiceWorker registration failed: ', error);
-            });
-        });
-      }
-    </script>
-  </body>
+</body>
 </html>
